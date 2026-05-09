@@ -1,136 +1,149 @@
 # ── procesar_pyg.ps1 ─────────────────────────────────────────────────────────
-# Lee los 3 archivos Excel del Estado de Resultados y extrae metricas clave.
-# Retorna un array de hashtables, una por mes, con todos los indicadores.
+# Reads the Excel P&G (Income Statement) files and extracts monthly metrics.
+# Returns an array of hashtables, one per month.
 # ─────────────────────────────────────────────────────────────────────────────
 
 . "$PSScriptRoot\..\config\rutas.ps1"
 
-$MESES_ABREV = @{
+$MONTH_ABBREV = @{
     "Enero"="Ene"; "Febrero"="Feb"; "Marzo"="Mar"; "Abril"="Abr"
     "Mayo"="May"; "Junio"="Jun"; "Julio"="Jul"; "Agosto"="Ago"
     "Septiembre"="Sep"; "Octubre"="Oct"; "Noviembre"="Nov"; "Diciembre"="Dic"
 }
 
-function ConvertirMes($texto) {
-    $t = $texto -replace "`r`n|`n|`r", " " -replace "\s+", " "
-    foreach ($k in $MESES_ABREV.Keys) { $t = $t -replace $k, $MESES_ABREV[$k] }
+function ConvertMonthLabel($text) {
+    $t = $text -replace "`r`n|`n|`r", " " -replace "\s+", " "
+    foreach ($k in $MONTH_ABBREV.Keys) { $t = $t -replace $k, $MONTH_ABBREV[$k] }
     $t = $t -replace "20(\d\d)", '$1'
     return $t.Trim()
 }
 
-function ObtenerFilasPorNombre($ws, $lastRow) {
-    $ocurrencias = @{}
+function GetRowsByLabel($ws, $lastRow) {
+    $map = @{}
     for ($r = 1; $r -le $lastRow; $r++) {
         $txt = $ws.Cells.Item($r, 1).Text.Trim()
         if ($txt -eq "") { continue }
-        if (-not $ocurrencias.ContainsKey($txt)) {
-            $ocurrencias[$txt] = [System.Collections.Generic.List[int]]::new()
+        if (-not $map.ContainsKey($txt)) {
+            $map[$txt] = [System.Collections.Generic.List[int]]::new()
         }
-        $ocurrencias[$txt].Add($r)
+        $map[$txt].Add($r)
     }
-    return $ocurrencias
+    return $map
 }
 
-function LeerCeldaPyG($ws, $fila, $col) {
-    if ($fila -eq 0) { return 0 }
-    $v = $ws.Cells.Item($fila, $col).Value2
+function ReadCellPyG($ws, $row, $col) {
+    if ($row -eq 0) { return 0 }
+    $v = $ws.Cells.Item($row, $col).Value2
     if ($null -eq $v) { return 0 }
-    return [math]::Round($v)
+    $n = $v -as [double]
+    if ($null -eq $n) { return 0 }
+    return [math]::Round($n)
 }
 
-function LeerArchivoPyG($excel, $rutaArchivo, $periodo) {
-    if (-not (Test-Path $rutaArchivo)) {
-        Write-Warning "Archivo no encontrado: $rutaArchivo"
+function ReadPyGFile($excel, $filePath, $year) {
+    if (-not (Test-Path $filePath)) {
+        Write-Warning "File not found: $filePath"
         return @()
     }
-    Write-Host "  Leyendo $periodo..." -ForegroundColor Cyan
-    $wb = $excel.Workbooks.Open($rutaArchivo)
-    $ws = $wb.Sheets.Item(1)
-    $lastRow = $ws.UsedRange.Rows.Count
+    Write-Host "  Reading $year..." -ForegroundColor Cyan
 
-    $columnasMes = [ordered]@{}
-    for ($col = 1; $col -le 30; $col++) {
+    $wb      = $excel.Workbooks.Open($filePath)
+    $ws      = $wb.Sheets.Item(1)
+    $lastRow = $ws.UsedRange.Rows.Count
+    $lastCol = $ws.UsedRange.Columns.Count
+
+    # Scan row 8 for month headers; store as string keys to avoid
+    # integer-indexing on OrderedDictionary (ArgumentOutOfRangeException bug)
+    $monthColKeys = [System.Collections.Generic.List[string]]::new()
+    $monthColMap  = @{}
+    for ($col = 1; $col -le $lastCol; $col++) {
         $header = $ws.Cells.Item(8, $col).Text.Trim()
         if ($header -eq "" -or $header -match "Total|Codigo|Nombre") { continue }
-        $label = ConvertirMes $header
-        if ($label -ne "") { $columnasMes[$col] = $label }
+        $label = ConvertMonthLabel $header
+        # Only accept labels that look like a real month abbreviation
+        if ($label -match "^(Ene|Feb|Mar|Abr|May|Jun|Jul|Ago|Sep|Oct|Nov|Dic)") {
+            $key = "$col"
+            $monthColKeys.Add($key)
+            $monthColMap[$key] = $label
+        }
     }
 
-    $oc = ObtenerFilasPorNombre $ws $lastRow
+    $rows = GetRowsByLabel $ws $lastRow
 
-    $fVentas      = if ($oc["Total Operacionales"])           { $oc["Total Operacionales"][0] }           else { 0 }
-    $fIngresos    = if ($oc["Total Ingresos"])                { $oc["Total Ingresos"][0] }                else { 0 }
-    $fPersonal    = if ($oc["Total Gastos de personal"])      { $oc["Total Gastos de personal"][-1] }     else { 0 }
-    $fArriendo    = if ($oc["Total Arrendamientos"])          { $oc["Total Arrendamientos"][-1] }         else { 0 }
-    $fServicios   = if ($oc["Total Servicios"])               { $oc["Total Servicios"][-1] }              else { 0 }
-    $fHonorarios  = if ($oc["Total Honorarios"])              { $oc["Total Honorarios"][-1] }             else { 0 }
-    $fImpuestos   = if ($oc["Total Impuestos"])               { $oc["Total Impuestos"][-1] }              else { 0 }
-    $fDiversos    = if ($oc["Total Diversos"])                { $oc["Total Diversos"][-1] }               else { 0 }
-    $fGastosVtas  = if ($oc["Total Operacionales de ventas"]) { $oc["Total Operacionales de ventas"][0] } else { 0 }
-    $fTotalGastos = if ($oc["Total Gastos"])                  { $oc["Total Gastos"][0] }                  else { 0 }
-    $fCVentas     = if ($oc["Total Costos de ventas"])        { $oc["Total Costos de ventas"][0] }        else { 0 }
-    $fResultado   = if ($oc["Resultado del Ejercicio"])       { $oc["Resultado del Ejercicio"][0] }       else { 0 }
+    $rowSales     = if ($rows["Total Operacionales"])           { $rows["Total Operacionales"][0] }           else { 0 }
+    $rowRevenue   = if ($rows["Total Ingresos"])                { $rows["Total Ingresos"][0] }                else { 0 }
+    $rowPersonal  = if ($rows["Total Gastos de personal"])      { $rows["Total Gastos de personal"][-1] }     else { 0 }
+    $rowRent      = if ($rows["Total Arrendamientos"])          { $rows["Total Arrendamientos"][-1] }         else { 0 }
+    $rowServices  = if ($rows["Total Servicios"])               { $rows["Total Servicios"][-1] }              else { 0 }
+    $rowFees      = if ($rows["Total Honorarios"])              { $rows["Total Honorarios"][-1] }             else { 0 }
+    $rowTaxes     = if ($rows["Total Impuestos"])               { $rows["Total Impuestos"][-1] }              else { 0 }
+    $rowMisc      = if ($rows["Total Diversos"])                { $rows["Total Diversos"][-1] }               else { 0 }
+    $rowSellExp   = if ($rows["Total Operacionales de ventas"]) { $rows["Total Operacionales de ventas"][0] } else { 0 }
+    $rowTotalExp  = if ($rows["Total Gastos"])                  { $rows["Total Gastos"][0] }                  else { 0 }
+    $rowCOGS      = if ($rows["Total Costos de ventas"])        { $rows["Total Costos de ventas"][0] }        else { 0 }
+    $rowResult    = if ($rows["Resultado del Ejercicio"])       { $rows["Resultado del Ejercicio"][0] }       else { 0 }
 
-    $datos = [System.Collections.Generic.List[hashtable]]::new()
+    $data = [System.Collections.Generic.List[hashtable]]::new()
 
-    foreach ($col in $columnasMes.Keys) {
-        $mes = $columnasMes[$col]
+    foreach ($key in $monthColKeys) {
+        $col = [int]$key
+        $mes = $monthColMap[$key]
 
-        $ventas      = LeerCeldaPyG $ws $fVentas      $col
-        $ingresos    = LeerCeldaPyG $ws $fIngresos    $col
-        $cVentas     = LeerCeldaPyG $ws $fCVentas     $col
-        $personal    = LeerCeldaPyG $ws $fPersonal    $col
-        $arriendo    = LeerCeldaPyG $ws $fArriendo    $col
-        $servicios   = LeerCeldaPyG $ws $fServicios   $col
-        $honorarios  = LeerCeldaPyG $ws $fHonorarios  $col
-        $impuestos   = LeerCeldaPyG $ws $fImpuestos   $col
-        $diversos    = LeerCeldaPyG $ws $fDiversos     $col
-        $gastosVtas  = LeerCeldaPyG $ws $fGastosVtas  $col
-        $totalGastos = LeerCeldaPyG $ws $fTotalGastos $col
-        $resultado   = LeerCeldaPyG $ws $fResultado   $col
+        $sales      = ReadCellPyG $ws $rowSales    $col
+        $revenue    = ReadCellPyG $ws $rowRevenue  $col
+        $cogs       = ReadCellPyG $ws $rowCOGS     $col
+        $personal   = ReadCellPyG $ws $rowPersonal $col
+        $rent       = ReadCellPyG $ws $rowRent     $col
+        $services   = ReadCellPyG $ws $rowServices $col
+        $fees       = ReadCellPyG $ws $rowFees     $col
+        $taxes      = ReadCellPyG $ws $rowTaxes    $col
+        $misc       = ReadCellPyG $ws $rowMisc     $col
+        $sellExp    = ReadCellPyG $ws $rowSellExp  $col
+        $totalExp   = ReadCellPyG $ws $rowTotalExp $col
+        $result     = ReadCellPyG $ws $rowResult   $col
 
-        $margenBruto = if ($ventas -ne 0) { [math]::Round((($ventas - $cVentas) / $ventas) * 100, 2) } else { 0 }
+        $grossMargin = if ($sales -ne 0) { [math]::Round((($sales - $cogs) / $sales) * 100, 2) } else { 0 }
 
-        $datos.Add(@{
-            periodo      = $periodo
+        $data.Add(@{
+            periodo      = $year
             mes          = $mes
-            ventas       = $ventas
-            ingresos     = $ingresos
-            costo_ventas = $cVentas
-            margen_pesos = $ventas - $cVentas
-            margen_pct   = $margenBruto
+            ventas       = $sales
+            ingresos     = $revenue
+            costo_ventas = $cogs
+            margen_pesos = $sales - $cogs
+            margen_pct   = $grossMargin
             personal     = $personal
-            arriendo     = $arriendo
-            servicios    = $servicios
-            honorarios   = $honorarios
-            impuestos    = $impuestos
-            diversos     = $diversos
-            gastos_ventas = $gastosVtas
-            total_gastos = $totalGastos
-            resultado    = $resultado
+            arriendo     = $rent
+            servicios    = $services
+            honorarios   = $fees
+            impuestos    = $taxes
+            diversos     = $misc
+            gastos_ventas = $sellExp
+            total_gastos = $totalExp
+            resultado    = $result
         })
     }
 
     $wb.Close($false)
-    Write-Host "    -> $($datos.Count) meses leidos" -ForegroundColor Green
-    return $datos.ToArray()
+    Write-Host "    -> $($data.Count) months read" -ForegroundColor Green
+    return $data.ToArray()
 }
 
-function ProcesarTodosLosPyG {
-    Write-Host "`nIniciando lectura de P&G..." -ForegroundColor Yellow
+function ProcessAllPyG {
+    Write-Host "`nReading P&G files..." -ForegroundColor Yellow
     $excel = New-Object -ComObject Excel.Application
-    $excel.Visible = $false
+    $excel.Visible       = $false
     $excel.DisplayAlerts = $false
 
-    $todosDatos = [System.Collections.Generic.List[hashtable]]::new()
-    foreach ($anio in @("2024","2025","2026")) {
-        $ruta = $script:CONFIG.Archivos_PyG[$anio]
-        $meses = LeerArchivoPyG $excel $ruta $anio
-        foreach ($m in $meses) { $todosDatos.Add($m) }
+    $allData = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($year in @("2024","2025","2026")) {
+        $path   = $script:CONFIG.Archivos_PyG[$year]
+        $months = ReadPyGFile $excel $path $year
+        foreach ($m in $months) { $allData.Add($m) }
     }
 
     $excel.Quit()
     [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
-    Write-Host "`nTotal de meses procesados: $($todosDatos.Count)" -ForegroundColor Green
-    return $todosDatos.ToArray()
+    Write-Host "`nTotal months processed: $($allData.Count)" -ForegroundColor Green
+    return $allData.ToArray()
 }

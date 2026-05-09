@@ -1,129 +1,122 @@
-# ── procesar_balance.ps1 ──────────────────────────────────────────────────────
-# Lee los archivos Excel del Balance General Comparativo y extrae indicadores
-# mensuales de liquidez, endeudamiento y estructura del balance.
+# ── procesar_balance.ps1 ─────────────────────────────────────────────────────
+# Reads Balance Sheet Excel files and extracts monthly liquidity indicators.
 # ─────────────────────────────────────────────────────────────────────────────
 
 . "$PSScriptRoot\..\config\rutas.ps1"
 
-$MESES_ABREV_BAL = @{
+$MONTH_ABBREV_BAL = @{
     "Enero"="Ene"; "Febrero"="Feb"; "Marzo"="Mar"; "Abril"="Abr"
     "Mayo"="May"; "Junio"="Jun"; "Julio"="Jul"; "Agosto"="Ago"
     "Septiembre"="Sep"; "Octubre"="Oct"; "Noviembre"="Nov"; "Diciembre"="Dic"
 }
 
-function ConvertirMesBalance($texto) {
-    $t = $texto -replace "`r`n|`n|`r", " " -replace "\s+", " "
-    foreach ($k in $MESES_ABREV_BAL.Keys) { $t = $t -replace $k, $MESES_ABREV_BAL[$k] }
+function ConvertBalanceMonth($text) {
+    $t = $text -replace "`r`n|`n|`r", " " -replace "\s+", " "
+    foreach ($k in $MONTH_ABBREV_BAL.Keys) { $t = $t -replace $k, $MONTH_ABBREV_BAL[$k] }
     $t = $t -replace "20(\d\d)", '$1'
     return $t.Trim()
 }
 
-function BuscarFila($ws, $lastRow, $etiqueta) {
+function FindRow($ws, $lastRow, $label) {
     for ($r = 9; $r -le $lastRow; $r++) {
         $txt = $ws.Cells.Item($r, 1).Text.Trim()
-        if ($txt -eq $etiqueta) { return $r }
+        if ($txt -eq $label) { return $r }
     }
     return 0
 }
 
-# Funcion separada (no anidada) para leer celda numerica de Excel
-function LeerCelda($ws, $fila, $col) {
-    if ($fila -eq 0) { return 0.0 }
-    $v = $ws.Cells.Item($fila, $col).Value2
+function ReadCell($ws, $row, $col) {
+    if ($row -eq 0) { return 0.0 }
+    $v = $ws.Cells.Item($row, $col).Value2
     if ($v -eq $null) { return 0.0 }
     return [double]$v
 }
 
-function LeerArchivoBalance($excel, $rutaArchivo) {
-    Write-Host "  [BALANCE] Leyendo: $rutaArchivo" -ForegroundColor Gray
-    if (-not (Test-Path $rutaArchivo)) {
-        Write-Host "  OMITIDO - archivo no encontrado" -ForegroundColor Yellow
+function ReadBalanceFile($excel, $filePath) {
+    Write-Host "  [BALANCE] Reading: $filePath" -ForegroundColor Gray
+    if (-not (Test-Path $filePath)) {
+        Write-Host "  SKIPPED - file not found" -ForegroundColor Yellow
         return @()
     }
 
-    $wb      = $excel.Workbooks.Open($rutaArchivo)
+    $wb      = $excel.Workbooks.Open($filePath)
     $ws      = $wb.Worksheets.Item(1)
     $lastRow = $ws.UsedRange.Rows.Count
     $lastCol = $ws.UsedRange.Columns.Count
 
-    $fDisponible  = BuscarFila $ws $lastRow "Total Disponible"
-    $fClientes    = BuscarFila $ws $lastRow "Total Clientes"
-    $fDeudores    = BuscarFila $ws $lastRow "Total Deudores"
-    $fInventarios = BuscarFila $ws $lastRow "Total Inventarios"
-    $fTotalActivo = BuscarFila $ws $lastRow "Total Activo"
-    $fObligFin    = BuscarFila $ws $lastRow "Total Obligaciones financieras"
-    $fProveedores = BuscarFila $ws $lastRow "Total Proveedores"
-    $fCxP         = BuscarFila $ws $lastRow "Total Cuentas por pagar"
-    $fImpuestos   = BuscarFila $ws $lastRow "Total Impuestos, gravamenes y tasas"
-    $fObligLab    = BuscarFila $ws $lastRow "Total Obligaciones laborales"
-    $fOtrosPas    = BuscarFila $ws $lastRow "Total Otros pasivos"
-    $fTotalPasivo = BuscarFila $ws $lastRow "Total Pasivo"
-    $fPatrimonio  = BuscarFila $ws $lastRow "Total Patrimonio"
+    $rowCash      = FindRow $ws $lastRow "Total Disponible"
+    $rowReceiv    = FindRow $ws $lastRow "Total Clientes"
+    $rowDebtors   = FindRow $ws $lastRow "Total Deudores"
+    $rowInventory = FindRow $ws $lastRow "Total Inventarios"
+    $rowTotAsset  = FindRow $ws $lastRow "Total Activo"
+    $rowBankDebt  = FindRow $ws $lastRow "Total Obligaciones financieras"
+    $rowSuppliers = FindRow $ws $lastRow "Total Proveedores"
+    $rowAPOther   = FindRow $ws $lastRow "Total Cuentas por pagar"
+    $rowTaxes     = FindRow $ws $lastRow "Total Impuestos, gravamenes y tasas"
+    $rowLabor     = FindRow $ws $lastRow "Total Obligaciones laborales"
+    $rowOtherLiab = FindRow $ws $lastRow "Total Otros pasivos"
+    $rowTotLiab   = FindRow $ws $lastRow "Total Pasivo"
+    $rowEquity    = FindRow $ws $lastRow "Total Patrimonio"
 
-    # Si no encontro con nombre sin tilde, intentar con tilde
-    if ($fImpuestos -eq 0) {
-        $fImpuestos = BuscarFila $ws $lastRow "Total Impuestos, gravamenes y tasas"
-    }
-
-    $resultados = [System.Collections.Generic.List[hashtable]]::new()
+    $results = [System.Collections.Generic.List[hashtable]]::new()
 
     for ($c = 3; $c -le $lastCol; $c++) {
-        $encabezado = $ws.Cells.Item(8, $c).Value2
-        if (-not $encabezado) { continue }
-        $mes = ConvertirMesBalance $encabezado
+        $header = $ws.Cells.Item(8, $c).Value2
+        if (-not $header) { continue }
+        $mes = ConvertBalanceMonth $header
         if (-not $mes) { continue }
 
-        $disponible   = LeerCelda $ws $fDisponible  $c
-        $cxc          = LeerCelda $ws $fClientes    $c
-        $deudores     = LeerCelda $ws $fDeudores    $c
-        $inventarios  = LeerCelda $ws $fInventarios $c
-        $total_activo = LeerCelda $ws $fTotalActivo $c
-        $oblig_fin    = LeerCelda $ws $fObligFin    $c
-        $proveedores  = LeerCelda $ws $fProveedores $c
-        $cxp_otros    = LeerCelda $ws $fCxP         $c
-        $impuestos    = LeerCelda $ws $fImpuestos   $c
-        $oblig_lab    = LeerCelda $ws $fObligLab    $c
-        $otros_pas    = LeerCelda $ws $fOtrosPas    $c
-        $total_pasivo = LeerCelda $ws $fTotalPasivo $c
-        $patrimonio   = LeerCelda $ws $fPatrimonio  $c
+        $cash      = ReadCell $ws $rowCash      $c
+        $cxc       = ReadCell $ws $rowReceiv    $c
+        $debtors   = ReadCell $ws $rowDebtors   $c
+        $inventory = ReadCell $ws $rowInventory $c
+        $totAsset  = ReadCell $ws $rowTotAsset  $c
+        $bankDebt  = ReadCell $ws $rowBankDebt  $c
+        $suppliers = ReadCell $ws $rowSuppliers $c
+        $apOther   = ReadCell $ws $rowAPOther   $c
+        $taxes     = ReadCell $ws $rowTaxes     $c
+        $labor     = ReadCell $ws $rowLabor     $c
+        $otherLiab = ReadCell $ws $rowOtherLiab $c
+        $totLiab   = ReadCell $ws $rowTotLiab   $c
+        $equity    = ReadCell $ws $rowEquity    $c
 
-        $activo_cte = $disponible + $deudores + $inventarios
-        $pasivo_cte = $proveedores + $cxp_otros + $impuestos + $oblig_lab + $otros_pas
+        $currentAssets = $cash + $debtors + $inventory
+        $currentLiab   = $suppliers + $apOther + $taxes + $labor + $otherLiab
 
-        $resultados.Add(@{
-            mes           = $mes
-            disponible    = [long]$disponible
-            cxc           = [long]$cxc
-            deudores      = [long]$deudores
-            inventarios   = [long]$inventarios
-            activo_cte    = [long]$activo_cte
-            total_activo  = [long]$total_activo
-            oblig_fin     = [long]$oblig_fin
-            proveedores   = [long]$proveedores
-            cxp_otros     = [long]$cxp_otros
-            pasivo_cte    = [long]$pasivo_cte
-            total_pasivo  = [long]$total_pasivo
-            patrimonio    = [long]$patrimonio
+        $results.Add(@{
+            mes          = $mes
+            disponible   = [long]$cash
+            cxc          = [long]$cxc
+            deudores     = [long]$debtors
+            inventarios  = [long]$inventory
+            activo_cte   = [long]$currentAssets
+            total_activo = [long]$totAsset
+            oblig_fin    = [long]$bankDebt
+            proveedores  = [long]$suppliers
+            cxp_otros    = [long]$apOther
+            pasivo_cte   = [long]$currentLiab
+            total_pasivo = [long]$totLiab
+            patrimonio   = [long]$equity
         })
     }
 
     $wb.Close($false)
-    Write-Host "  [BALANCE] OK - $($resultados.Count) meses leidos" -ForegroundColor Green
-    return $resultados.ToArray()
+    Write-Host "  [BALANCE] OK - $($results.Count) months read" -ForegroundColor Green
+    return $results.ToArray()
 }
 
-function ProcesarTodosLosBalances {
+function ProcessAllBalances {
     $excel = New-Object -ComObject Excel.Application
     $excel.Visible       = $false
     $excel.DisplayAlerts = $false
 
-    $todos = [System.Collections.Generic.List[hashtable]]::new()
+    $all = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($key in ($script:CONFIG.Archivos_Balance.Keys | Sort-Object)) {
-        $datos = LeerArchivoBalance $excel $script:CONFIG.Archivos_Balance[$key]
-        foreach ($d in $datos) { $todos.Add($d) }
+        $rows = ReadBalanceFile $excel $script:CONFIG.Archivos_Balance[$key]
+        foreach ($r in $rows) { $all.Add($r) }
     }
 
     $excel.Quit()
-    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
-    return $todos.ToArray()
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+    return $all.ToArray()
 }

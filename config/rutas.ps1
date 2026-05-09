@@ -1,28 +1,27 @@
-# ── Configuración de rutas ──────────────────────────────────────────────────
-# Editar estas rutas si cambia la ubicación de los archivos en tu PC.
+# ── rutas.ps1 ────────────────────────────────────────────────────────────────
+# Edit these paths if the Excel files are moved on this machine.
 
 $script:CONFIG = @{
 
-    # Carpeta donde están los archivos Excel del P&G
     DataAnalytics = "G:\Mi unidad\ALTERNATIVAS EL DESCUENTO\Data Analytics"
 
-    # Archivos del Estado de Resultados (uno por año)
+    # P&G (Income Statement) - one file per year
     Archivos_PyG = @{
         "2024" = "G:\Mi unidad\ALTERNATIVAS EL DESCUENTO\Data Analytics\Estado de Resultados Comparativo Mes a Mes 2024.xlsx"
         "2025" = "G:\Mi unidad\ALTERNATIVAS EL DESCUENTO\Data Analytics\Estado de Resultados Comparativo Mes a Mes 2025.xlsx"
         "2026" = "G:\Mi unidad\ALTERNATIVAS EL DESCUENTO\Data Analytics\Estado de Resultados Comparativo Mes a Mes 2026.xlsx"
     }
 
-    # Archivo de Costo de Ventas Detallado (para el Top 50 de productos)
+    # Detailed cost of goods (for Top-50 product analysis)
     Costo_Ventas_Detallado = "G:\Mi unidad\ALTERNATIVAS EL DESCUENTO\Data Analytics\Costo Ventas Detallado_20260509_170131.xlsx"
 
-    # Archivos del Balance General (uno por rango)
+    # Balance Sheet - one file per date range
     Archivos_Balance = @{
         "2024-2025" = "G:\Mi unidad\ALTERNATIVAS EL DESCUENTO\Data Analytics\Balance General Comparativo_20260509_174609.xlsx"
         "2025-2026" = "G:\Mi unidad\ALTERNATIVAS EL DESCUENTO\Data Analytics\Balance General Comparativo_20260509_174656.xlsx"
     }
 
-    # Destinos de los archivos de datos para el dashboard
+    # Dashboard output paths
     Output_Dashboard         = "G:\Mi unidad\github\retail-cm-ia\dashboard\data\data.js"
     Output_Balance_Dashboard = "G:\Mi unidad\github\retail-cm-ia\dashboard\data\data_balance.js"
 }
