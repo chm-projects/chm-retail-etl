@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git push)",
+      "Bash(git config *)",
+      "Bash(git remote *)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(git pull *)",
+      "Bash(git fetch *)",
+      "Bash(git reset *)",
+      "Bash(git stash *)",
+      "PowerShell(Move-Item *)",
+      "PowerShell(Remove-Item *)",
+      "PowerShell(Copy-Item *)",
+      "PowerShell(Rename-Item *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Set-Content *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Out-File *)",
+      "PowerShell(Test-Path *)",
+      "Read(//g/Mi unidad/ALTERNATIVAS EL DESCUENTO/Data Analytics/**)"
+    ],
+    "deny": [],
+    "additionalDirectories": [
+      "G:\\Mi unidad\\github\\retail-cm-ia",
+      "G:\\Mi unidad\\github\\retail-cm-ia\\dashboard",
+      "G:\\Mi unidad\\github\\retail-cm-ia\\conocimientos",
+      "G:\\Mi unidad\\github\\retail-cm-ia\\habilidades"
+    ]
+  }
+}

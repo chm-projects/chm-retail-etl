@@ -1,47 +1,65 @@
 # retail-etl
 **Alternativas El Descuento** — Pipeline de Procesamiento de Datos  
-Yarumal, Antioquia · ETL: Excel → JSON → Dashboard BI
+Yarumal, Antioquia · ETL: Excel → JS → Dashboard BI
 
-> Este repositorio es el motor de datos del proyecto.  
-> El repositorio de conocimiento, habilidades IA y el dashboard viven en **[retail-cm-ia](https://github.com/sachavar/retail-cm-ia)**.
+> Motor de datos del proyecto. El dashboard y los conocimientos de negocio viven en **[retail-cm-ia](https://github.com/sachavar/retail-cm-ia)**.
 
 ---
 
-## ¿Qué hace este repositorio?
+## ¿Qué hace?
 
-Lee los archivos Excel del P&G (Estado de Resultados) directamente desde la carpeta de Data Analytics y genera el archivo `data.js` que alimenta el dashboard BI de forma automática. **Elimina la necesidad de editar el dashboard manualmente cada vez que hay datos nuevos.**
+Lee los archivos Excel del P&G (Estado de Resultados) y del Balance General directamente desde la carpeta de Data Analytics y genera los archivos `data.js` y `data_balance.js` que alimentan el dashboard BI.
 
 ```
-[Excel P&G 2024/2025/2026]
-         ↓
-   ejecutar.ps1          ← Doble clic para actualizar
-         ↓
-   dashboard/data/data.js  ← Generado automáticamente
-         ↓
-   mando-integral-bi.html  ← Lee data.js y muestra los datos
+Excel P&G (2024 / 2025 / 2026)          Excel Balance (2024-25 / 2025-26)
+         │                                          │
+         ▼                                          ▼
+  procesar_pyg.ps1                        procesar_balance.ps1
+  ProcessAllPyG()                         ProcessAllBalances()
+  COM Excel → array hashtable/mes         COM Excel → array hashtable/mes
+         │                                          │
+         └─────────────────┬────────────────────────┘
+                           ▼
+                     ejecutar.ps1
+                 Construye JS sin BOM
+                           │
+            ┌──────────────┴──────────────┐
+            ▼                             ▼
+    data/data.js                 data/data_balance.js
+    window.DASHBOARD_DATA        window.BALANCE_DATA
+            │                             │
+            └──────────────┬──────────────┘
+                           ▼
+             mando-integral-bi.html
+             (cargado por retail-cm-ia)
 ```
 
 ---
 
 ## Requisitos
 
-- Windows con PowerShell (ya incluido en Windows 10/11)
-- Microsoft Excel instalado (para leer los archivos .xlsx via COM)
-- Los archivos de Data Analytics en la ruta configurada
+- Windows 10/11 con PowerShell 5.1 (ya incluido)
+- Microsoft Excel instalado (lectura de .xlsx via COM)
+- Los archivos Excel en la ruta configurada en `config/rutas.ps1`
 
 ---
 
-## Cómo Usar
+## Cómo usar
 
-**Opción 1 — Doble clic:**
-1. Clic derecho en `ejecutar.ps1`
-2. Seleccionar "Ejecutar con PowerShell"
-3. Abrir `retail-cm-ia/dashboard/mando-integral-bi.html` en el navegador
+### Opción 1 — Botón en el dashboard (recomendado)
+1. Abrir `retail-cm-ia/INICIAR DASHBOARD.bat` (doble clic)
+2. En el dashboard presionar **Actualizar datos** (botón fucsia, esquina superior)
+3. La barra de progreso avanza en tiempo real hasta completar
 
-**Opción 2 — PowerShell:**
+### Opción 2 — Terminal directa
 ```powershell
-cd "G:\Mi unidad\github\retail-etl"
-.\ejecutar.ps1
+powershell -ExecutionPolicy Bypass -File "G:\Mi unidad\github\retail-etl\ejecutar.ps1"
+```
+
+### Ejecutar tests
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-Pester 'G:\Mi unidad\github\retail-etl\tests\ETL.Tests.ps1'"
+# Resultado esperado: Passed: 30, Failed: 0
 ```
 
 ---
@@ -50,45 +68,85 @@ cd "G:\Mi unidad\github\retail-etl"
 
 ```
 retail-etl/
-├── ejecutar.ps1           ← Runner principal (doble clic aquí)
+├── ejecutar.ps1               # Runner principal del ETL (pasos 1-5)
 ├── config/
-│   └── rutas.ps1          ← Configurar rutas si cambian los archivos
+│   └── rutas.ps1              # ÚNICO ARCHIVO A EDITAR si cambian rutas
 ├── scripts/
-│   └── procesar_pyg.ps1   ← Lógica de extracción del P&G
-└── README.md
+│   ├── procesar_pyg.ps1       # Lee Excel P&G → array mensual
+│   └── procesar_balance.ps1   # Lee Excel Balance → array mensual
+├── tests/
+│   └── ETL.Tests.ps1          # 30 tests Pester (unit + integración)
+└── .claude/
+    └── settings.json          # Permisos y acceso a retail-cm-ia
 ```
 
 ---
 
-## Configurar Rutas
+## Configurar rutas
 
-Si los archivos Excel cambian de nombre o ubicación, editar `config/rutas.ps1`:
+Si los archivos Excel cambian de nombre o ubicación, editar **solo** `config/rutas.ps1`:
 
 ```powershell
 $script:CONFIG = @{
     Archivos_PyG = @{
-        "2024" = "ruta\al\archivo_2024.xlsx"
-        "2025" = "ruta\al\archivo_2025.xlsx"
-        "2026" = "ruta\al\archivo_2026.xlsx"
+        "2024" = "ruta\al\P&G_2024.xlsx"
+        "2025" = "ruta\al\P&G_2025.xlsx"
+        "2026" = "ruta\al\P&G_2026.xlsx"
     }
-    Output_Dashboard = "G:\...\retail-cm-ia\dashboard\data\data.js"
+    Archivos_Balance = @{
+        "2024-2025" = "ruta\al\Balance_24-25.xlsx"
+        "2025-2026" = "ruta\al\Balance_25-26.xlsx"
+    }
+    Output_Dashboard         = "ruta\retail-cm-ia\dashboard\data\data.js"
+    Output_Balance_Dashboard = "ruta\retail-cm-ia\dashboard\data\data_balance.js"
 }
 ```
 
 ---
 
-## Datos que Extrae del P&G
+## Datos que extrae
 
-| Campo | Fuente en el P&G | Uso en Dashboard |
+### P&G — por mes (`data.js`)
+
+| Campo | Fuente en Excel | Uso en dashboard |
 |---|---|---|
-| `ventas` | Total Operacionales (ingresos retail) | Gráfica de tendencia |
-| `costo_ventas` | Total Costos de ventas | Margen bruto |
-| `margen_pct` | (ventas - costo_ventas) / ventas | KPI de margen |
-| `personal` | Total Gastos de personal (sección 52) | Costos fijos |
-| `arriendo` | Total Arrendamientos (sección 52) | Costos fijos |
-| `servicios` | Total Servicios (sección 52) | Costos fijos |
-| `honorarios` | Total Honorarios (sección 52) | Costos fijos |
-| `resultado` | Resultado del Ejercicio | Utilidad neta |
+| `ventas` | Total Operacionales | Gráfica tendencia, KPI ventas |
+| `costo_ventas` | Total Costos de ventas | Cálculo margen bruto |
+| `margen_pesos` | ventas − costo_ventas | KPI margen en pesos |
+| `margen_pct` | (margen / ventas) × 100 | Gráfica Margen Bruto % |
+| `personal` | Total Gastos de personal | Tab Costos Fijos |
+| `arriendo` | Total Arrendamientos | Tab Costos Fijos |
+| `servicios` | Total Servicios | Tab Costos Fijos |
+| `honorarios` | Total Honorarios | Tab Costos Fijos |
+| `total_gastos` | Total Gastos | Análisis cobertura |
+| `resultado` | Resultado del Ejercicio | KPI Utilidad Neta |
+
+### Balance General — por mes (`data_balance.js`)
+
+| Campo | Fuente en Excel | Uso en dashboard |
+|---|---|---|
+| `disponible` | Total Disponible | Liquidez |
+| `cxc` | Total Clientes | Rotación CxC |
+| `inventarios` | Total Inventarios | Rotación inventario |
+| `activo_cte` | Calculado: caja+deudores+inv | Capital de trabajo |
+| `total_activo` | Total Activo | Endeudamiento |
+| `oblig_fin` | Total Obligaciones financieras | Deuda bancaria |
+| `proveedores` | Total Proveedores | Rotación CxP |
+| `pasivo_cte` | Calculado: proveedores+CxP+imp+lab+otros | Capital de trabajo |
+| `total_pasivo` | Total Pasivo | Endeudamiento |
+| `patrimonio` | Total Patrimonio | Estructura financiera |
+
+---
+
+## Reglas técnicas (aprendidas en producción)
+
+| Regla | Razón |
+|---|---|
+| Código en inglés ASCII-only | `ñ`/tildes en variables → mojibake en proceso hijo PS5.1 |
+| `@{}` con claves string, no int | `[ordered]@{}[$col]` con int → `ArgumentOutOfRangeException` |
+| Funciones a nivel de script | Funciones anidadas en loops pierden scope en PS5.1 |
+| `UTF8Encoding($false)` para escribir JS | `[System.Text.Encoding]::UTF8` incluye BOM |
+| Sin heredocs en bloques condicionales | `@"..."@` dentro de `else{}` → `AmpersandNotAllowed` |
 
 ---
 
@@ -96,7 +154,7 @@ $script:CONFIG = @{
 
 | Repositorio | Responsabilidad |
 |---|---|
-| **retail-cm-ia** | Conocimiento, habilidades IA, dashboard HTML |
-| **retail-etl** (este) | Extracción y transformación de datos del P&G |
+| **retail-etl** (este) | Extracción y transformación de datos Excel |
+| **retail-cm-ia** | Dashboard, conocimientos de negocio, habilidades IA |
 
-El archivo `data.js` generado por este pipeline va a `retail-cm-ia/dashboard/data/` y está en el `.gitignore` de ese repo (datos financieros, no se versionan).
+Los archivos `data.js` y `data_balance.js` son generados; están en `.gitignore` de `retail-cm-ia` (datos financieros, no se versionan).
