@@ -1,8 +1,15 @@
-# retail-etl
-**Alternativas El Descuento** — Pipeline de Procesamiento de Datos  
-Yarumal, Antioquia · ETL: Excel → JS → Dashboard BI
+# retail-etl — ARCHIVADO
 
-> Motor de datos del proyecto. El dashboard y los conocimientos de negocio viven en **[retail-cm-ia](https://github.com/sachavar/retail-cm-ia)**.
+> **Este repositorio esta archivado y reemplazado por [chm-retail-dwh](https://github.com/chm-projects/chm-retail-dwh).**
+>
+> El nuevo pipeline produce output identico (byte-equivalente) con arquitectura declarativa (dbt + DuckDB + Python), tests automaticos y deteccion de drift. Para el flujo mensual ver [docs/migration.md](https://github.com/chm-projects/chm-retail-dwh/blob/master/docs/migration.md) en el nuevo repo.
+>
+> Este repo se conserva como referencia historica. No ejecutar `ejecutar.ps1` si retail-dwh esta activo.
+
+---
+
+**Alternativas El Descuento** — Pipeline de Procesamiento de Datos (LEGADO)
+Yarumal, Antioquia · ETL: Excel → JS → Dashboard BI
 
 ---
 
